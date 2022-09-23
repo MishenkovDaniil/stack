@@ -1,0 +1,2 @@
+void log_info(FILE*, Stack*, const char*) at stack.h
+stack	 [0064FEF0](ok):
