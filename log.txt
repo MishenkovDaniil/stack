@@ -1,2 +1,77 @@
-void log_info(FILE*, Stack*, const char*) at stack.h
-stack	 [0064FEF0](ok):
+void stack_push(Stack*, elem_t, const char*, const char*, const char*, int) at stack.h(57)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 3735928559.000000
+	[1] = 3735928559.000000
+	[2] = 3735928559.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
+void stack_push(Stack*, elem_t, const char*, const char*, const char*, int) at stack.h(57)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 1.000000
+	[1] = 3735928559.000000
+	[2] = 3735928559.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
+void stack_push(Stack*, elem_t, const char*, const char*, const char*, int) at stack.h(57)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 1.000000
+	[1] = 2.000000
+	[2] = 3735928559.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
+elem_t stack_pop(Stack*, const char*, const char*, const char*, int, int*) at stack.h(74)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 1.000000
+	[1] = 2.000000
+	[2] = 3.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
+elem_t stack_pop(Stack*, const char*, const char*, const char*, int, int*) at stack.h(74)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 1.000000
+	[1] = 2.000000
+	[2] = 3735928559.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
+void stack_push(Stack*, elem_t, const char*, const char*, const char*, int) at stack.h(57)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 1.000000
+	[1] = 3735928559.000000
+	[2] = 3735928559.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
+void stack_push(Stack*, elem_t, const char*, const char*, const char*, int) at stack.h(57)
+stack [0064FED4](ok):
+&stk1 at int main() in main.cpp:
+data [00D92140]:
+	[0] = 1.000000
+	[1] = 2.000000
+	[2] = 3735928559.000000
+	[3] = 3735928559.000000
+	[4] = 3735928559.000000
+
+
