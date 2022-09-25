@@ -4,7 +4,15 @@
 static int ERRNO = 0;
 
 typedef double elem_t;
+
 static FILE *log_file = fopen ("log.txt", "w");
+
+enum ERRORS
+{
+    STK_IS_NULLPTR = 0b01,
+    DATA_IS_NULLPTR = 0b010,
+    STACK_OVERLOW = 0b0100
+};
 
 struct Debug_info
 {
@@ -23,28 +31,30 @@ struct Stack
 
     elem_t *data = nullptr;
 
-    size_t size = 0;
-    size_t capacity = 0;
+    int size = 0;
+    int capacity = 0;
 };
 
 void stack_push (Stack *stk, elem_t value, const char *var_stk, const char *call_func,
                  const char *file, const int call_line, int *err = &ERRNO);
 elem_t stack_pop(Stack *stk, const char *var_stk, const char *call_func,
                  const char *call_file, const int call_line, int *err = &ERRNO);
-void stack_init (Stack *stk, size_t capacity);
+void stack_init (Stack *stk, int capacity);
 void stack_resize (Stack *stk);
 void stack_dtor (Stack *stk);
 int stack_error (Stack *stk, int *err);
 void log_info (Stack *stk, int *err);
-void fill_stack (Stack *stk);
+void fill_stack (Stack *stk, int start);
 void log_data (Stack *stk);
 void log_data_members (Stack *stk);
 void stack_dump (Stack *stk, int *err);
 void log_sostoyanie (Stack *stk, int *err);
 
-void fill_stack (Stack *stk, size_t start)
+
+
+void fill_stack (Stack *stk, int start)
 {
-    for (size_t i = start - 1; i < stk->capacity; i++)
+    for (int i = start - 1; i < stk->capacity; i++)
     {
         (stk->data)[i] = 0xDEADBEEF;
     }
@@ -107,7 +117,7 @@ elem_t stack_pop(Stack *stk, const char *var_stk, const char *call_func,
     return latest_value;
 }
 
-void stack_init (Stack *stk, size_t capacity)
+void stack_init (Stack *stk, int capacity)
 {
     stk->capacity = capacity;
 
@@ -118,8 +128,8 @@ void stack_init (Stack *stk, size_t capacity)
 
 void stack_resize (Stack *stk)
 {
-    size_t current_size = stk->size;
-    size_t previous_capacity = stk->capacity;
+    int current_size = stk->size;
+    int previous_capacity = stk->capacity;
 
     if (current_size > 1)
     {
@@ -150,21 +160,21 @@ int stack_error (Stack *stk, int *err)
 {
     if (stk == nullptr)
     {
-        *err += 1;
+        (*err) = STK_IS_NULLPTR;
     }
     if (stk->data == nullptr)
     {
-        *err += 10;
+        *err |= DATA_IS_NULLPTR;
     }
     if (stk->size > stk->capacity)
     {
-        *err += 100;
+        *err |= STACK_OVERLOW;
+        printf ("1");
     }
     if (stk->size < 0 || stk->capacity < 0)
     {
-        *err += 1000;
+        *err |= 0b01000;
     }
-
     stack_dump (stk, err);
 
     if (*err)
@@ -182,6 +192,8 @@ void stack_dump (Stack *stk, int *err)
     log_data (stk);
 
     fprintf (log_file, "\n\n");
+    /*if (*err)
+        exit(0);*/
 }
 
 ////////////////////////////////////////////////////////////////
@@ -206,22 +218,22 @@ void log_sostoyanie (Stack *stk, int *err)
     {
         fprintf (log_file, "(ERROR:");
 
-        if ((*err)%10)
+        if ((*err) & ~(~0 << 1))
         {
             sostoyanie[i] = "stk is a null pointer,";
             i++;
         }
-        if (((*err)/10)%10)
+        if ((*err) >> 1 & ~(~0 << 2))
         {
             sostoyanie[i] = "data is a null pointer,";
             i++;
         }
-        if (((*err)/100)%10)
+        if ((*err) >> 2 & ~(~0 << 3))
         {
             sostoyanie[i] = "stack overflow,";
             i++;
         }
-        if (((*err)/1000)%10)
+        if ((*err) >> 3 & ~(~0 << 4))
         {
             sostoyanie[i] = "capacity or size of stack is under zero";
             i++;
