@@ -10,11 +10,11 @@ struct Debug_info
 {
     const char *func      = nullptr;
     const char *file      = nullptr;
-    const char *var_stk  = nullptr;
+    const char *var_stk   = nullptr;
     const char *call_func = nullptr;
     const char *call_file = nullptr;
     int line = 0;
-    int stk_line = -1;
+    int stk_line = 0;
 };
 
 struct Stack
@@ -28,18 +28,19 @@ struct Stack
 };
 
 void stack_push (Stack *stk, elem_t value, const char *var_stk, const char *call_func,
-                 const char *file, const int call_line);
+                 const char *file, const int call_line, int *err = &ERRNO);
 elem_t stack_pop(Stack *stk, const char *var_stk, const char *call_func,
                  const char *call_file, const int call_line, int *err = &ERRNO);
 void stack_init (Stack *stk, size_t capacity);
 void stack_resize (Stack *stk);
 void stack_dtor (Stack *stk);
-int stack_is_ok (Stack *stk);
-void log_info (FILE *log_file, Stack *stk, const char *sostoyanie);
+int stack_error (Stack *stk, int *err);
+void log_info (Stack *stk, int *err);
 void fill_stack (Stack *stk);
-void log_data (FILE *log_file, Stack *stk, const char *sostoyanie);
-void log_data_members (FILE *log_file, Stack *stk);
-
+void log_data (Stack *stk);
+void log_data_members (Stack *stk);
+void stack_dump (Stack *stk, int *err);
+void log_sostoyanie (Stack *stk, int *err);
 
 void fill_stack (Stack *stk, size_t start)
 {
@@ -50,7 +51,7 @@ void fill_stack (Stack *stk, size_t start)
 }
 
 void stack_push (Stack *stk, elem_t value, const char *var_stk, const char *call_func,
-                 const char *call_file, const int call_line)
+                 const char *call_file, const int call_line, int *err)
 {
     (stk->info).file = __FILE__;
     (stk->info).func = __PRETTY_FUNCTION__;
@@ -59,7 +60,14 @@ void stack_push (Stack *stk, elem_t value, const char *var_stk, const char *call
     (stk->info).call_file = call_file;
     (stk->info).var_stk = var_stk;
 
-    assert (stack_is_ok(stk));
+    if ((*err) > 0)
+    {
+        stack_dump (stk, err);
+    }
+    if ((*err) = stack_error(stk, err) > 0)
+    {
+        stack_dump (stk, err);
+    }
 
     stack_resize (stk);
 
@@ -76,7 +84,14 @@ elem_t stack_pop(Stack *stk, const char *var_stk, const char *call_func,
     (stk->info).call_file = call_file;
     (stk->info).var_stk = var_stk;
 
-    assert (stack_is_ok(stk));
+    if ((*err) > 0)
+    {
+        stack_dump (stk, err);
+    }
+    if ((*err) = stack_error(stk, err) > 0)
+    {
+        stack_dump (stk, err);
+    }
 
 /*  if (*err)
     {
@@ -131,42 +146,122 @@ void stack_dtor (Stack *stk)
     free (stk->data);
 }
 
-int stack_is_ok (Stack *stk)
+int stack_error (Stack *stk, int *err)
 {
+    if (stk == nullptr)
+    {
+        *err += 1;
+    }
+    if (stk->data == nullptr)
+    {
+        *err += 10;
+    }
+    if (stk->size > stk->capacity)
+    {
+        *err += 100;
+    }
+    if (stk->size < 0 || stk->capacity < 0)
+    {
+        *err += 1000;
+    }
 
-    log_info (log_file, stk, "ok");
-    printf ("ok");
+    stack_dump (stk, err);
 
-    return 1;
+    if (*err)
+    {
+        return *err;
+    }
+
+    return 0;
 }
 
- ////////////////////////////////////////////////////////////////
- ////////////////////////////////////////////////////////////////
- ////////////////////////////////////////////////////////////////
 
-void log_info (FILE *log_file, Stack *stk, const char *sostoyanie)
+void stack_dump (Stack *stk, int *err)
 {
-    log_data (log_file, stk, sostoyanie);
-
-    log_data_members (log_file, stk);
+    log_info (stk, err);
+    log_data (stk);
 
     fprintf (log_file, "\n\n");
 }
 
-void log_data (FILE *log_file, Stack *stk, const char *sostoyanie)
+////////////////////////////////////////////////////////////////
+ ////////////////////////////////////////////////////////////////
+ ////////////////////////////////////////////////////////////////
+void log_info (Stack *stk, int *err)
 {
-    fprintf (log_file, "%s at %s(%d)\n"
-                       "stack [%p](%s):\n"
-                       "%s at %s in %s:\n"
-                       "data [%p]:\n",
-                       (stk->info).func, (stk->info).file, (stk->info).line,
-                        stk, sostoyanie, (stk->info).var_stk, stk->info.call_func, stk->info.call_file, stk->data);
+    fprintf (log_file,
+            "%s at %s(%d)\n"
+            "stack [%p]",
+            (stk->info).func, (stk->info).file, (stk->info).line,
+            stk);
+    log_sostoyanie (stk, err);
+}
+void log_sostoyanie (Stack *stk, int *err)
+{
+    const char *sostoyanie[5] = {};
+
+    int i = 0;
+
+    if (*err)
+    {
+        fprintf (log_file, "(ERROR:");
+
+        if ((*err)%10)
+        {
+            sostoyanie[i] = "stk is a null pointer,";
+            i++;
+        }
+        if (((*err)/10)%10)
+        {
+            sostoyanie[i] = "data is a null pointer,";
+            i++;
+        }
+        if (((*err)/100)%10)
+        {
+            sostoyanie[i] = "stack overflow,";
+            i++;
+        }
+        if (((*err)/1000)%10)
+        {
+            sostoyanie[i] = "capacity or size of stack is under zero";
+            i++;
+        }
+    }
+    else
+    {
+        sostoyanie[i] = "(ok";
+        i++;
+    }
+
+    sostoyanie[i] = nullptr;
+
+    for (int index = 0; sostoyanie[index] != nullptr; index++)
+    {
+        fprintf (log_file, "%s", sostoyanie[index]);
+    }
+    fprintf (log_file, ")\n");
 }
 
-void log_data_members (FILE *log_file, Stack *stk)
+void log_data (Stack *stk)
 {
-    for (int i = 0; i < stk->capacity; i++)
+    fprintf (log_file,
+            "%s at %s in %s:\n"
+            "data [%p]:\n",
+            (stk->info).var_stk, stk->info.call_func, stk->info.call_file, stk->data);
+    log_data_members (stk);
+}
+
+void log_data_members (Stack *stk)
+{
+    fprintf (log_file, "\tsize = %ld\n", stk->size);
+    fprintf (log_file, "\tcapacity = %ld\n", stk->capacity);
+
+    for (int i = 0; i < stk->size; i++)
     {
-        fprintf (log_file, "\t[%d] = %lf\n", i, (stk->data)[i]);
+        fprintf (log_file, "\t*[%ld] = %lf\n", i, (stk->data)[i]);
+    }
+    for (int i = stk->size; i < stk->capacity; i++)
+    {
+        fprintf (log_file, "\t[%ld] = %lf\n", i, (stk->data)[i]);
     }
 }
