@@ -2,17 +2,21 @@
 #include <assert.h>
 
 static FILE *log_file = fopen ("log.txt", "w");
+
 int ERRNO = 0;
 static const size_t POISON = 0xDEADBEEF;
+static const unsigned long long CANARY = 0xAB8EACAAAB8EACAA;
 
 typedef double elem_t;
 
 enum ERRORS
 {
-    STACK_NULL_STK       = 0x1 << 0,
-    STACK_NULL_DATA      = 0x1 << 1,
-    STACK_STACK_OVERFLOW = 0x1 << 2,
-    STACK_INCORRECT_SIZE = 0x1 << 3
+    STACK_NULL_STK              = 0x1 << 0,
+    STACK_NULL_DATA             = 0x1 << 1,
+    STACK_STACK_OVERFLOW        = 0x1 << 2,
+    STACK_INCORRECT_SIZE        = 0x1 << 3,
+    STACK_DATA_LIMITS_VIOLATED  = 0x1 << 4,
+    STACK_STACK_LIMITS_VIOLATED = 0x1 << 5
 };
 
 struct Debug_info
@@ -29,34 +33,39 @@ struct Debug_info
 
 struct Stack
 {
+    unsigned long long stack_start = CANARY;
+
     struct Debug_info info = {};
 
     elem_t *data = nullptr;
 
     int size = 0;
     int capacity = 0;
+
+    unsigned long long stack_end = CANARY;
 };
 
 
-void   stack_init   (Stack *stk, int capacity);
-int    stack_push   (Stack *stk, elem_t value, int *err = &ERRNO);
-elem_t stack_pop    (Stack *stk,               int *err = &ERRNO);
+void   stack_init (Stack *stk, int capacity);
+int    stack_push (Stack *stk, elem_t value, int *err = &ERRNO);
+elem_t stack_pop  (Stack *stk,               int *err = &ERRNO);
 
-void   __debug_stack_init   (Stack *stk, int capacity, const char *var_stk,   const char *call_func,
-                                                       const char *call_file, const int creat_line);
-int    __debug_stack_push   (Stack *stk, elem_t value, const int call_line, int *err = &ERRNO);
-elem_t __debug_stack_pop   (Stack *stk,                const int call_line, int *err = &ERRNO);
+void   __debug_stack_init (Stack *stk, int capacity, const char *var_stk,   const char *call_func,
+                                                     const char *call_file, const int creat_line);
+int    __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err = &ERRNO);
+elem_t __debug_stack_pop  (Stack *stk,               const int call_line, int *err = &ERRNO);
 
-void   fill_stack   (Stack *stk, int start);
-void   stack_resize (Stack *stk);
-void   stack_dtor   (Stack *stk);
-int    stack_error  (Stack *stk, int *err);
-void   stack_dump   (Stack *stk, int *err);
+void   stack_realloc (Stack *stk, int previous_capacity);
+void   fill_stack    (Stack *stk, int start);
+int    stack_error   (Stack *stk, int *err);
+void   stack_dump    (Stack *stk, int *err);
+void   stack_resize  (Stack *stk);
+void   stack_dtor    (Stack *stk);
 
-void   log_info (Stack *stk, int *err);
-void   log_data (Stack *stk);
+void   log_sostoyanie   (Stack *stk, int *err);
+void   log_info         (Stack *stk, int *err);
+void   log_data         (Stack *stk);
 void   log_data_members (Stack *stk);
-void   log_sostoyanie (Stack *stk, int *err);
 
 //int stack_push (Stack *stk, elem_t value);
 
@@ -72,15 +81,29 @@ void   log_sostoyanie (Stack *stk, int *err);
 //#define stack_pop(stk) __debug_stack_pop (__func__, __LINE__, stk, value, err);
 
 //stack_push(stack_pop());
-void stack_realloc (Stack *stk)
+void stack_realloc (Stack *stk, int previous_capacity)
 {
-    if (stk->capacity)
+    if (previous_capacity)
     {
-        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t));
+        stk->data = (elem_t *)((char *)stk->data - 8);
+        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t) + 16 * sizeof (char));
+        assert (stk->data);
+        stk->data = (elem_t *)((char *)stk->data + 8);
+
+        *((unsigned long long *)(stk->data + previous_capacity * sizeof (elem_t))) = 0;
+        *((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t))) = CANARY;
     }
     else
     {
-        stk->data = (elem_t *)calloc (stk->capacity, sizeof (elem_t));
+        stk->data = (elem_t *)calloc (1, stk->capacity * sizeof (elem_t) + 16 * sizeof (char));
+        assert (stk->data);
+
+        *((unsigned long long *)stk->data) = CANARY;
+
+        stk->data = (elem_t *)((char *)stk->data + 8);
+
+        *((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t))) = CANARY;
+        printf ("1%d",  3);
     }
 }
 
@@ -100,6 +123,7 @@ int stack_push (Stack *stk, elem_t value, int *err)
     }
     if ((*err) = stack_error(stk, err))
     {
+        printf ("foo\n");
         return *err;
     }
 
@@ -161,7 +185,7 @@ void stack_init (Stack *stk, int capacity)
 
     stk->capacity = capacity;
 
-    stack_realloc (stk);
+    stack_realloc (stk, 0);
 
     fill_stack (stk, 1);
 }
@@ -188,14 +212,14 @@ void stack_resize (Stack *stk)
         {
             stk->capacity *= 2;
 
-            stack_realloc (stk);
+            stack_realloc (stk, previous_capacity);
 
             fill_stack (stk, previous_capacity + 1);
         }
         if (stk->capacity > current_size * 4)
         {
             stk->capacity /= 2;
-            stack_realloc (stk);
+            stack_realloc (stk, previous_capacity);
         }
     }
 
@@ -224,13 +248,30 @@ int stack_error (Stack *stk, int *err)
     }
     if (stk->size > stk->capacity)
     {
+        printf ("size is %d\n capacity is %d\n", stk->size, stk->capacity);
         *err |= STACK_STACK_OVERFLOW;
     }
     if (stk->size < 0 || stk->capacity < 0)
     {
+        //printf ("size is %d\n capacity is %d\n", stk->size, stk->capacity);
         *err |= STACK_INCORRECT_SIZE;
     }
+    if ((*((unsigned long long *)((char*)stk->data - 8)) != CANARY) ||
+        (*((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t))) != CANARY))
+    {
+        printf ("size is %llu\n", (*((unsigned long long *)((char*)stk->data - 8))));
+        printf ("%llu\n", (*((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t)))));
+        printf ("%llu\n", CANARY);
+        *err |= STACK_DATA_LIMITS_VIOLATED;
+    }
+    if (stk->stack_start != CANARY || stk->stack_end != CANARY)
+    {
+        *err |= STACK_STACK_LIMITS_VIOLATED;
+    }
 
+    printf ("size is %llu\n", (*((unsigned long long *)((char*)stk->data - 8))));
+    printf ("%llu\n", (*((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t)))));
+    printf ("%llu\n", CANARY);
     #ifdef STACK_DEBUG
     stack_dump (stk, err);
     #endif
@@ -253,6 +294,8 @@ void stack_dump (Stack *stk, int *err)
 
 void stack_dtor (Stack *stk)
 {
+    stk->data =(elem_t *)((char *)stk->data - 8);
+
     free (stk->data);
 }
 ////////////////////////////////////////////////////////////////
@@ -269,7 +312,7 @@ void log_info (Stack *stk, int *err)
 }
 void log_sostoyanie (Stack *stk, int *err)
 {
-    const char *sostoyanie[5] = {};
+    const char *sostoyanie[10] = {};
 
     int i = 0;
 
@@ -277,24 +320,34 @@ void log_sostoyanie (Stack *stk, int *err)
     {
         fprintf (log_file, "(ERROR:");
 
-        if ((*err) & ~(~0 << 1))
+        if ((*err) & 0x1 << 0)
         {
-            sostoyanie[i] = "stk is a null pointer,";
+            sostoyanie[i] = "stk is a null pointer, ";
             i++;
         }
-        if ((*err) >> 1 & ~(~0 << 2))
+        if ((*err) & 0x1 << 1)
         {
-            sostoyanie[i] = "data is a null pointer,";
+            sostoyanie[i] = "data is a null pointer, ";
             i++;
         }
-        if ((*err) >> 2 & ~(~0 << 3))
+        if ((*err) & 0x1 << 2)
         {
-            sostoyanie[i] = "stack overflow,";
+            sostoyanie[i] = "stack overflow, ";
             i++;
         }
-        if ((*err) >> 3 & ~(~0 << 4))
+        if ((*err) & 0x1 << 3)
         {
-            sostoyanie[i] = "capacity or size of stack is under zero";
+            sostoyanie[i] = "capacity or size of stack is under zero, ";
+            i++;
+        }
+        if ((*err) & 0x1 << 4)
+        {
+            sostoyanie[i] = "access rights of stack data are invaded, ";
+            i++;
+        }
+        if ((*err) & 0x1 << 5)
+        {
+            sostoyanie[i] = "access rights of stack are invaded";
             i++;
         }
     }
@@ -306,7 +359,7 @@ void log_sostoyanie (Stack *stk, int *err)
 
     sostoyanie[i] = nullptr;
 
-    for (int index = 0; sostoyanie[index] != nullptr; index++)
+    for (int index = 0; index < i; index++)
     {
         fprintf (log_file, "%s", sostoyanie[index]);
     }
