@@ -3,7 +3,7 @@
 
 static FILE *log_file = fopen ("log.txt", "w");
 
-int ERRNO = 0;
+static int ERRNO = 0;
 static const size_t POISON = 0xDEADBEEF;
 static const unsigned long long CANARY = 0xAB8EACAAAB8EACAA;
 
@@ -33,7 +33,9 @@ struct Debug_info
 
 struct Stack
 {
+    #ifdef CANARY_PROT
     unsigned long long stack_start = CANARY;
+    #endif
 
     struct Debug_info info = {};
 
@@ -42,7 +44,9 @@ struct Stack
     int size = 0;
     int capacity = 0;
 
+    #ifdef CANARY_PROT
     unsigned long long stack_end = CANARY;
+    #endif
 };
 
 
@@ -72,6 +76,8 @@ void stack_realloc (Stack *stk, int previous_capacity)
 {
     if (previous_capacity)
     {
+        #ifdef CANARY_PROT
+
         stk->data = (elem_t *)((char *)stk->data - sizeof (CANARY));
         stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t) + 2 * sizeof (CANARY));
 
@@ -79,11 +85,21 @@ void stack_realloc (Stack *stk, int previous_capacity)
 
         stk->data = (elem_t *)((char *)stk->data + sizeof (CANARY));
 
-        *((unsigned long long *)(stk->data + previous_capacity)) = 0;
+        *((unsigned long long *)(stk->data + previous_capacity)) = POISON;
         *((unsigned long long *)(stk->data + stk->capacity)) = CANARY;
+
+        #else
+
+        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t));
+
+        assert (stk->data);
+
+        #endif
     }
     else
     {
+        #ifdef CANARY_PROT
+
         stk->data = (elem_t *)calloc (1, stk->capacity * sizeof (elem_t) + 2 * sizeof (CANARY));
 
         assert (stk->data);
@@ -93,6 +109,14 @@ void stack_realloc (Stack *stk, int previous_capacity)
         stk->data = (elem_t *)(((char *)(stk->data)) + sizeof (CANARY));
 
         *((unsigned long long *)(stk->data + stk->capacity)) = CANARY;
+
+        #else
+
+        stk->data = (elem_t *)calloc (stk->capacity, sizeof (elem_t));
+
+        assert (stk->data);
+
+        #endif
     }
 }
 
@@ -101,7 +125,6 @@ void fill_stack (Stack *stk, int start)
     for (int i = start - 1; i < stk->capacity; i++)
     {
         (stk->data)[i] = POISON;
-        printf ("\n[%llu]\n", (stk->data)[i]);
     }
 }
 
@@ -118,8 +141,8 @@ int stack_push (Stack *stk, elem_t value, int *err)
 
     stack_resize (stk);
 
-    (stk->data)[stk->size] = value;
-    stk->size += 1;
+    (stk->data)[stk->size++] = value;
+
     return 0;
 }
 
@@ -231,6 +254,9 @@ int stack_error (Stack *stk, int *err)
     {
         *err |= STACK_INCORRECT_SIZE;
     }
+
+    #ifdef CANARY_PROT
+
     if ((*((unsigned long long *)((char*)stk->data - sizeof (CANARY))) != CANARY) ||
         (*((unsigned long long *)(stk->data + stk->capacity)) != CANARY))
     {
@@ -240,6 +266,9 @@ int stack_error (Stack *stk, int *err)
     {
         *err |= STACK_STACK_LIMITS_VIOLATED;
     }
+
+    #endif
+
 
     #ifdef STACK_DEBUG
     stack_dump (stk, err);
