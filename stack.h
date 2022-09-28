@@ -67,43 +67,32 @@ void   log_info         (Stack *stk, int *err);
 void   log_data         (Stack *stk);
 void   log_data_members (Stack *stk);
 
-//int stack_push (Stack *stk, elem_t value);
 
-/*int __debug_stack_push (Stack *stk, elem_t value, const char *func, int line)
-{
-    fprintf(logs, "push stack....")
-    ...
-
-    stack_push();
-}*/
-
-//#define stack_pop(stk, err) __debug_stack_pop (__func__, __LINE__, stk, value, err);
-//#define stack_pop(stk) __debug_stack_pop (__func__, __LINE__, stk, value, err);
-
-//stack_push(stack_pop());
 void stack_realloc (Stack *stk, int previous_capacity)
 {
     if (previous_capacity)
     {
-        stk->data = (elem_t *)((char *)stk->data - 8);
-        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t) + 16 * sizeof (char));
-        assert (stk->data);
-        stk->data = (elem_t *)((char *)stk->data + 8);
+        stk->data = (elem_t *)((char *)stk->data - sizeof (CANARY));
+        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t) + 2 * sizeof (CANARY));
 
-        *((unsigned long long *)(stk->data + previous_capacity * sizeof (elem_t))) = 0;
-        *((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t))) = CANARY;
+        assert (stk->data);
+
+        stk->data = (elem_t *)((char *)stk->data + sizeof (CANARY));
+
+        *((unsigned long long *)(stk->data + previous_capacity)) = 0;
+        *((unsigned long long *)(stk->data + stk->capacity)) = CANARY;
     }
     else
     {
-        stk->data = (elem_t *)calloc (1, stk->capacity * sizeof (elem_t) + 16 * sizeof (char));
+        stk->data = (elem_t *)calloc (1, stk->capacity * sizeof (elem_t) + 2 * sizeof (CANARY));
+
         assert (stk->data);
 
-        *((unsigned long long *)stk->data) = CANARY;
+        *((unsigned long long *)(stk->data)) = CANARY;
 
-        stk->data = (elem_t *)((char *)stk->data + 8);
+        stk->data = (elem_t *)(((char *)(stk->data)) + sizeof (CANARY));
 
-        *((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t))) = CANARY;
-        printf ("1%d",  3);
+        *((unsigned long long *)(stk->data + stk->capacity)) = CANARY;
     }
 }
 
@@ -112,6 +101,7 @@ void fill_stack (Stack *stk, int start)
     for (int i = start - 1; i < stk->capacity; i++)
     {
         (stk->data)[i] = POISON;
+        printf ("\n[%llu]\n", (stk->data)[i]);
     }
 }
 
@@ -123,14 +113,13 @@ int stack_push (Stack *stk, elem_t value, int *err)
     }
     if ((*err) = stack_error(stk, err))
     {
-        printf ("foo\n");
         return *err;
     }
 
     stack_resize (stk);
 
-    (stk->data)[stk->size++] = value;
-
+    (stk->data)[stk->size] = value;
+    stk->size += 1;
     return 0;
 }
 
@@ -213,28 +202,16 @@ void stack_resize (Stack *stk)
             stk->capacity *= 2;
 
             stack_realloc (stk, previous_capacity);
-
-            fill_stack (stk, previous_capacity + 1);
+            fill_stack    (stk, previous_capacity + 1);
         }
         if (stk->capacity > current_size * 4)
         {
             stk->capacity /= 2;
+
             stack_realloc (stk, previous_capacity);
         }
     }
-
-//#define HASH_PROTEction
-//#define canary_prota
-/*
-    if (previous_capacity != stk->capacity)
-    {
-    // error???
-    // stack_realloc (mozhno usat kak calloc)
-    // mozhet canaries postavit
-        stk->data = (elem_t *)realloc (stk->data, (stk->capacity) * sizeof (elem_t));
-    }*/
 }
-
 
 int stack_error (Stack *stk, int *err)
 {
@@ -248,20 +225,15 @@ int stack_error (Stack *stk, int *err)
     }
     if (stk->size > stk->capacity)
     {
-        printf ("size is %d\n capacity is %d\n", stk->size, stk->capacity);
         *err |= STACK_STACK_OVERFLOW;
     }
     if (stk->size < 0 || stk->capacity < 0)
     {
-        //printf ("size is %d\n capacity is %d\n", stk->size, stk->capacity);
         *err |= STACK_INCORRECT_SIZE;
     }
-    if ((*((unsigned long long *)((char*)stk->data - 8)) != CANARY) ||
-        (*((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t))) != CANARY))
+    if ((*((unsigned long long *)((char*)stk->data - sizeof (CANARY))) != CANARY) ||
+        (*((unsigned long long *)(stk->data + stk->capacity)) != CANARY))
     {
-        printf ("size is %llu\n", (*((unsigned long long *)((char*)stk->data - 8))));
-        printf ("%llu\n", (*((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t)))));
-        printf ("%llu\n", CANARY);
         *err |= STACK_DATA_LIMITS_VIOLATED;
     }
     if (stk->stack_start != CANARY || stk->stack_end != CANARY)
@@ -269,9 +241,6 @@ int stack_error (Stack *stk, int *err)
         *err |= STACK_STACK_LIMITS_VIOLATED;
     }
 
-    printf ("size is %llu\n", (*((unsigned long long *)((char*)stk->data - 8))));
-    printf ("%llu\n", (*((unsigned long long *)(stk->data + stk->capacity * sizeof (elem_t)))));
-    printf ("%llu\n", CANARY);
     #ifdef STACK_DEBUG
     stack_dump (stk, err);
     #endif
@@ -383,11 +352,11 @@ void log_data_members (Stack *stk)
 
     for (int i = 0; i < stk->size; i++)
     {
-        fprintf (log_file, "\t*[%ld] = %lf\n", i, (stk->data)[i]);
+        fprintf (log_file, "\t*[%ld""] = %lf\n", i, (stk->data)[i]);
     }
     for (int i = stk->size; i < stk->capacity; i++)
     {
-        fprintf (log_file, "\t[%ld] = %lf\n", i, (stk->data)[i]);
+        fprintf (log_file, "\t [%ld] = %lf\n", i, (stk->data)[i]);
     }
 }
 
