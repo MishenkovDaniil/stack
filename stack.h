@@ -1,6 +1,13 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#define CANARY_PROT 1
+#define HASH_PROT 2
+
+#ifndef PROT_LEVEL
+#define PROT_LEVEL CANARY_PROT
+#endif
+
 static FILE *log_file = fopen ("log.txt", "w");
 
 static int ERRNO = 0;
@@ -35,7 +42,7 @@ struct Debug_info
 
 struct Stack
 {
-    #ifdef CANARY_PROT
+    #if (PROT_LEVEL & CANARY_PROT)
     unsigned long long stack_start = CANARY;
     #endif
 
@@ -46,9 +53,11 @@ struct Stack
     int size = 0;
     int capacity = 0;
 
+    #if (PROT_LEVEL & HASH_PROT)
     unsigned long long hash_sum = 0;
+    #endif
 
-    #ifdef CANARY_PROT
+    #if (PROT_LEVEL & CANARY_PROT)
     unsigned long long stack_end = CANARY;
     #endif
 };
@@ -90,7 +99,7 @@ void stack_realloc (Stack *stk, int previous_capacity)
 {
     if (previous_capacity)
     {
-        #ifdef CANARY_PROT
+        #if (PROT_LEVEL & CANARY_PROT)
 
         stk->data = (elem_t *)((char *)stk->data - sizeof (CANARY));
         stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t) + 2 * sizeof (CANARY));
@@ -114,7 +123,7 @@ void stack_realloc (Stack *stk, int previous_capacity)
     }
     else
     {
-        #ifdef CANARY_PROT
+        #if (PROT_LEVEL & CANARY_PROT)
 
         stk->data = (elem_t *)calloc (1, stk->capacity * sizeof (elem_t) + 2 * sizeof (CANARY));
 
@@ -158,7 +167,11 @@ int stack_push (Stack *stk, elem_t value, int *err)
 
     (stk->data)[stk->size++] = value;
 
+    #if (PROT_LEVEL & HASH_PROT)
+
     stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof(elem_t));
+
+    #endif
 
     return 0;
 }
@@ -191,7 +204,11 @@ elem_t stack_pop (Stack *stk, int *err)
 
     (stk->data)[stk->size] = POISON;
 
+    #if (PROT_LEVEL & HASH_PROT)
+
     stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
+
+    #endif
 
     return latest_value;
 }
@@ -210,7 +227,7 @@ void stack_init (Stack *stk, int capacity)
 {
     if (capacity < 1)
     {
-        fprintf (stderr, "capacity is incorrect");
+        fprintf (stderr, "capacity is incorrect %s, %s, %d", __PRETTY_FUNCTION__, __FILE__, __LINE__);
         assert (0);
     }
 
@@ -220,7 +237,11 @@ void stack_init (Stack *stk, int capacity)
 
     fill_stack (stk, 1);
 
+    #if (PROT_LEVEL & HASH_PROT)
+
     stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
+
+    #endif
 }
 
 void __debug_stack_init (Stack *stk, int capacity, const char *var_stk, const char *call_func,
@@ -263,7 +284,7 @@ unsigned long long m_gnu_hash (void *ptr, int size)
 
     for (unsigned long long index = 0; index < size; index++)
     {
-        sum += 33 * (unsigned int)(((unsigned char *)ptr)[index]);
+        sum = 33 * sum + (unsigned int)(((unsigned char *)ptr)[index]);
     }
 
     return sum;
@@ -288,7 +309,7 @@ int stack_error (Stack *stk, int *err)
         *err |= STACK_INCORRECT_SIZE;
     }
 
-    #ifdef CANARY_PROT
+    #if (PROT_LEVEL & CANARY_PROT)
 
     if ((*((unsigned long long *)((char*)stk->data - sizeof (CANARY))) != CANARY) ||
         (*((unsigned long long *)(stk->data + stk->capacity)) != CANARY))
@@ -302,10 +323,14 @@ int stack_error (Stack *stk, int *err)
 
     #endif
 
+    #if (PROT_LEVEL & HASH_PROT)
+
     if (stk->hash_sum != m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t)))
     {
         *err |= STACK_DATA_MESSED_UP;
     }
+
+    #endif
 
     #ifdef STACK_DEBUG
     stack_dump (stk, err);
