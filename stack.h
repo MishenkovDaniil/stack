@@ -9,7 +9,7 @@
 #endif
 
 static FILE *log_file = fopen ("log.txt", "w");
-
+int ERROR = 0;
 static int ERRNO = 0;
 static const size_t POISON = 0xDEADBEEF;
 static const unsigned long long CANARY = 0xAB8EACAAAB8EACAA;
@@ -25,7 +25,6 @@ enum ERRORS
     STACK_VIOLATED_DATA  = 0x1 << 4,
     STACK_VIOLATED_STACK = 0x1 << 5,
     STACK_DATA_MESSED_UP = 0x1 << 6
-
 };
 
 struct Debug_info
@@ -338,6 +337,7 @@ int stack_error (Stack *stk, int *err)
 
     if (*err)
     {
+        ERROR = *err;
         return *err;
     }
 
