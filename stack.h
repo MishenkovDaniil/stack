@@ -249,7 +249,7 @@ void __debug_stack_init (Stack *stk, int capacity, const char *var_stk, const ch
 {
     (stk->info).call_func = call_func;
     (stk->info).call_file = call_file;
-    (stk->info).var_stk = var_stk;
+    (*(var_stk) != '&') ? (stk->info).var_stk = var_stk : (stk->info).var_stk = var_stk + 1;
     (stk->info).creat_line = creat_line;
 
     stack_init (stk, capacity);
