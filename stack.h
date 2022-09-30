@@ -8,25 +8,42 @@
 #define PROT_LEVEL CANARY_PROT
 #endif
 
+#if (PROT_LEVEL & CANARY_PROT)
+
+#define mem_size            stk->capacity * sizeof (elem_t) + CANARIES_NUMBER * sizeof (canary_t)
+#define p_data_start        ((char *)stk->data - sizeof (canary_t))
+#define p_real_data_start   ((char *)stk->data + sizeof (canary_t))
+
+#else
+
+#define mem_size         stk->capacity * sizeof (elem_t)
+#define p_data_start     stk->data
+#define p_ral_data_start stk->data
+
+#endif
+
+
 typedef unsigned long long canary_t;
 typedef unsigned long long hash_t;
 typedef double elem_t;
 
+
 static int ERRNO = 0;
+static const int CANARIES_NUMBER = 2;
 static const size_t POISON = 0xDEADBEEF;
 static const canary_t CANARY = 0xAB8EACAAAB8EACAA;
-
 
 enum ERRORS
 {
     STACK_FOPEN_FAILED   = 0x1 << 0,
-    STACK_NULL_STK       = 0x1 << 1,
-    STACK_NULL_DATA      = 0x1 << 2,
-    STACK_STACK_OVERFLOW = 0x1 << 3,
-    STACK_INCORRECT_SIZE = 0x1 << 4,
-    STACK_VIOLATED_DATA  = 0x1 << 5,
-    STACK_VIOLATED_STACK = 0x1 << 6,
-    STACK_DATA_MESSED_UP = 0x1 << 7
+    STACK_ALLOC_FAIL     = 0x1 << 1,
+    STACK_NULL_STK       = 0x1 << 2,
+    STACK_NULL_DATA      = 0x1 << 3,
+    STACK_STACK_OVERFLOW = 0x1 << 4,
+    STACK_INCORRECT_SIZE = 0x1 << 5,
+    STACK_VIOLATED_DATA  = 0x1 << 6,
+    STACK_VIOLATED_STACK = 0x1 << 7,
+    STACK_DATA_MESSED_UP = 0x1 << 8
 };
 
 struct Debug_info
@@ -74,61 +91,41 @@ void   __debug_stack_init (Stack *stk, int capacity, const char *stk_name,   con
 int    __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err);
 elem_t __debug_stack_pop  (Stack *stk,               const int call_line, int *err);
 
-void   stack_realloc (Stack *stk, int previous_capacity);
-void   calloc_error  (void *ptr);
-void   fill_stack    (Stack *stk, int start);
-void   stack_error   (Stack *stk, int *err);
-void   stack_dump    (Stack *stk, int *err);
-void   stack_resize  (Stack *stk);
-void   stack_dtor    (Stack *stk);
+static int   stack_realloc (Stack *stk, int previous_capacity, int *err = &ERRNO);
+void         fill_stack    (Stack *stk, int start);
+static void  stack_error   (Stack *stk, int *err);
+static void  stack_dump    (Stack *stk, int *err, FILE *file = log_file);
+static void  stack_resize  (Stack *stk);
+void         stack_dtor    (Stack *stk);
 
-void   log_status   (Stack *stk, int *err);
-void   log_info         (Stack *stk, int *err);
-void   log_data         (Stack *stk);
-void   log_data_members (Stack *stk);
+static void   log_status       (Stack *stk, int *err, FILE *file = log_file);
+static void   log_info         (Stack *stk, int *err, FILE *file = log_file);
+static void   log_data         (Stack *stk, FILE *file = log_file);
+static void   log_data_members (Stack *stk, FILE *file = log_file);
 
-hash_t m_gnu_hash (void *ptr, int size);
+static hash_t m_gnu_hash (void *ptr, int size);
 
-void calloc_error (void *ptr)
-{
-    if (ptr == nullptr)
-    {
-        fprintf (stderr, "memory allocation crashed");
-    }
-}
 
-void stack_realloc (Stack *stk, int previous_capacity)
+static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 {
     if (previous_capacity)
     {
+        stk->data = (elem_t *)p_data_start;
+        stk->data = (elem_t *)realloc (stk->data, mem_size);
+        stk->data = (elem_t *)p_real_data_start;
+
         #if (PROT_LEVEL & CANARY_PROT)
-
-        stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
-        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t) + 2 * sizeof (canary_t));
-
-        assert (stk->data);
-
-        stk->data = (elem_t *)((char *)stk->data + sizeof (canary_t));
 
         *((canary_t *)(stk->data + previous_capacity)) = POISON;
         *((canary_t *)(stk->data + stk->capacity)) = CANARY;
 
-        #else
-
-        stk->data = (elem_t *)realloc (stk->data, stk->capacity * sizeof (elem_t));
-
-        assert (stk->data);
-
         #endif
-
-        calloc_error (stk->data);
     }
     else
     {
         #if (PROT_LEVEL & CANARY_PROT)
 
-        stk->data = (elem_t *)calloc (1, stk->capacity * sizeof (elem_t) + 2 * sizeof (canary_t));
-
+        stk->data = (elem_t *)calloc (stk->capacity * sizeof (elem_t) + CANARIES_NUMBER * sizeof (canary_t), 1);
 
         *((canary_t *)(stk->data)) = CANARY;
 
@@ -141,9 +138,18 @@ void stack_realloc (Stack *stk, int previous_capacity)
         stk->data = (elem_t *)calloc (stk->capacity, sizeof (elem_t));
 
         #endif
-
-        calloc_error (stk->data);
     }
+
+    if (stk->data == nullptr)
+    {
+        *err |= STACK_ALLOC_FAIL;
+
+        stack_dump(stk, err, stderr);
+
+        return *err;
+    }
+
+    return 0;
 }
 
 void fill_stack (Stack *stk, int start)
@@ -233,19 +239,24 @@ elem_t __debug_stack_pop (Stack *stk, const int call_line, int *err)
 
 void stack_init (Stack *stk, int capacity, int *err)
 {
-    stack_error (stk, err);
+    //stack_error (stk, err);
 
     stk->capacity = capacity;
 
-    stack_realloc (stk, 0);
+    if (!(stack_realloc (stk, 0, err)))
+    {
+        fill_stack (stk, 1);
 
-    fill_stack (stk, 1);
+        #if (PROT_LEVEL & HASH_PROT)
 
-    #if (PROT_LEVEL & HASH_PROT)
+        stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
 
-    stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
+        #endif
 
-    #endif
+        stack_error (stk, err);
+    }
+    else
+        ;
 }
 
 void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const char *call_func,
@@ -255,12 +266,16 @@ void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const c
     (stk->info).call_file = call_file;
     (stk->info).creat_line = creat_line;
 
+    (stk->info).file = __FILE__;
+    (stk->info).func = __PRETTY_FUNCTION__;
+    (stk->info).line = __LINE__;
+
     (*(stk_name) != '&') ? (stk->info).stk_name = stk_name : (stk->info).stk_name = stk_name + 1;
 
-    stack_init (stk, capacity);
+    stack_init (stk, capacity, err);
 }
 
-void stack_resize (Stack *stk)
+static void stack_resize (Stack *stk)
 {
     int current_size = stk->size;
     int previous_capacity = stk->capacity;
@@ -283,7 +298,7 @@ void stack_resize (Stack *stk)
     }
 }
 
-hash_t m_gnu_hash (void *ptr, int size)
+static hash_t m_gnu_hash (void *ptr, int size)
 {
     hash_t sum = 5381;
 
@@ -295,11 +310,12 @@ hash_t m_gnu_hash (void *ptr, int size)
     return sum;
 }
 
-void stack_error (Stack *stk, int *err)
+static void stack_error (Stack *stk, int *err)
 {
     if (!log_file)
     {
         *err |= STACK_FOPEN_FAILED;
+        stack_dump (stk, err, stderr);
     }
     if (!stk)
     {
@@ -313,7 +329,7 @@ void stack_error (Stack *stk, int *err)
     {
         *err |= STACK_STACK_OVERFLOW;
     }
-    if (stk->size < 0 || stk->capacity < 1)
+    if (stk->size < 0 || stk->capacity < 0)
     {
         *err |= STACK_INCORRECT_SIZE;
     }
@@ -346,12 +362,12 @@ void stack_error (Stack *stk, int *err)
     #endif
 }
 
-void stack_dump (Stack *stk, int *err)
+static void stack_dump (Stack *stk, int *err, FILE *file)
 {
-    log_info (stk, err);
-    log_data (stk);
+    log_info (stk, err, file);
+    log_data (stk, file);
 
-    fprintf (log_file, "\n\n");
+    fprintf (file, "\n\n");
 }
 
 void stack_dtor (Stack *stk)
@@ -370,20 +386,19 @@ void stack_dtor (Stack *stk)
 ////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////
 
-void log_info (Stack *stk, int *err)
-{
-    if (*err & STACK_FOPEN_FAILED)
+static void log_info (Stack *stk, int *err, FILE *file)
+{    /*if (*err & STACK_FOPEN_FAILED)
     {
         log_file = stderr;
-    }
+    }*/
 
-    fprintf (log_file,
+    fprintf (file,
             "%s at %s(%d)\n"
             "stack [%p]", stk->info.func, stk->info.file, stk->info.line, stk);
 
-    log_status (stk, err);
+    log_status (stk, err, file);
 }
-void log_status (Stack *stk, int *err)
+static void log_status (Stack *stk, int *err, FILE *file)
 {
     const char *status[10] = {};
 
@@ -391,8 +406,18 @@ void log_status (Stack *stk, int *err)
 
     if (*err)
     {
-        fprintf (log_file, "(ERROR:");
+        fprintf (file, "(ERROR:");
 
+        if (*err & STACK_FOPEN_FAILED)
+        {
+            status[i] = "opening log file failed";
+            i++;
+        }
+        if (*err & STACK_ALLOC_FAIL)
+        {
+            status[i] = "memory allocation failed";
+            i++;
+        }
         if (*err & STACK_NULL_STK)
         {
             status[i] = "stk is a null pointer";
@@ -441,19 +466,19 @@ void log_status (Stack *stk, int *err)
     {
         if (index < i - 1)
         {
-            fprintf (log_file, "%s, ", status[index]);
+            fprintf (file, "%s, ", status[index]);
         }
         else
         {
-            fprintf (log_file, "%s", status[index]);
+            fprintf (file, "%s", status[index]);
         }
     }
-    fprintf (log_file, ")\n");
+    fprintf (file, ")\n");
 }
 
-void log_data (Stack *stk)
+static void log_data (Stack *stk, FILE *file)
 {
-    fprintf (log_file,
+    fprintf (file,
             "%s at %s in %s(%d)(called at %d):\n"
             "data [%p]:\n",
             (stk->info).stk_name, (stk->info).call_func, (stk->info).call_file,
@@ -461,18 +486,18 @@ void log_data (Stack *stk)
     log_data_members (stk);
 }
 
-void log_data_members (Stack *stk)
+void log_data_members (Stack *stk, FILE *file)
 {
-    fprintf (log_file, "\tsize = %ld\n", stk->size);
-    fprintf (log_file, "\tcapacity = %ld\n", stk->capacity);
+    fprintf (file, "\tsize = %ld\n", stk->size);
+    fprintf (file, "\tcapacity = %ld\n", stk->capacity);
 
     for (int i = 0; i < stk->size; i++)
     {
-        fprintf (log_file, "\t*[%ld""] = %lf\n", i, (stk->data)[i]);
+        fprintf (file, "\t*[%ld""] = %lf\n", i, (stk->data)[i]);
     }
     for (int i = stk->size; i < stk->capacity; i++)
     {
-        fprintf (log_file, "\t [%ld] = %lf\n", i, (stk->data)[i]);
+        fprintf (file, "\t [%ld] = %lf\n", i, (stk->data)[i]);
     }
 }
 
