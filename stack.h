@@ -32,7 +32,7 @@ struct Debug_info
 {
     const char *func      = nullptr;
     const char *file      = nullptr;
-    const char *var_stk   = nullptr;
+    const char *stk_name   = nullptr;
     const char *call_func = nullptr;
     const char *call_file = nullptr;
     int creat_line = 0;
@@ -67,7 +67,7 @@ void   stack_init (Stack *stk, int capacity);
 int    stack_push (Stack *stk, elem_t value, int *err = &ERRNO);
 elem_t stack_pop  (Stack *stk,               int *err = &ERRNO);
 
-void   __debug_stack_init (Stack *stk, int capacity, const char *var_stk,   const char *call_func,
+void   __debug_stack_init (Stack *stk, int capacity, const char *stk_name,   const char *call_func,
                                                      const char *call_file, const int creat_line);
 int    __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err = &ERRNO);
 elem_t __debug_stack_pop  (Stack *stk,               const int call_line, int *err = &ERRNO);
@@ -244,12 +244,12 @@ void stack_init (Stack *stk, int capacity)
     #endif
 }
 
-void __debug_stack_init (Stack *stk, int capacity, const char *var_stk, const char *call_func,
+void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const char *call_func,
                  const char *call_file, const int creat_line)
 {
     (stk->info).call_func = call_func;
     (stk->info).call_file = call_file;
-    (*(var_stk) != '&') ? (stk->info).var_stk = var_stk : (stk->info).var_stk = var_stk + 1;
+    (*(stk_name) != '&') ? (stk->info).stk_name = stk_name : (stk->info).stk_name = stk_name + 1;
     (stk->info).creat_line = creat_line;
 
     stack_init (stk, capacity);
@@ -443,7 +443,7 @@ void log_data (Stack *stk)
     fprintf (log_file,
             "%s at %s in %s(%d)(called at %d):\n"
             "data [%p]:\n",
-            (stk->info).var_stk, (stk->info).call_func, (stk->info).call_file,
+            (stk->info).stk_name, (stk->info).call_func, (stk->info).call_file,
             (stk->info).creat_line, stk->info.call_line, stk->data);
     log_data_members (stk);
 }
