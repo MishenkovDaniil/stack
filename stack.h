@@ -11,7 +11,7 @@
 static FILE *log_file = fopen ("log.txt", "w");
 
 static int ERRNO = 0;
-static const size_t POISON = 0;
+static const size_t POISON = 0xDEADBEEF;
 static const unsigned long long CANARY = 0xAB8EACAAAB8EACAA;
 
 typedef double elem_t;
