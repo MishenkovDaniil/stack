@@ -19,7 +19,7 @@ static const int CANARIES_NUMBER = 2;
 static const size_t POISON = 0xDEADBEEF;
 static const canary_t CANARY = 0xAB8EACAAAB8EACAA;
 
-enum ERRORS
+enum errors
 {
     STACK_FOPEN_FAILED   = 0x1 << 0,
     STACK_ALLOC_FAIL     = 0x1 << 1,
@@ -94,6 +94,9 @@ static hash_t m_gnu_hash (void *ptr, int size);
 
 static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 {
+    assert (stk);
+    assert (err);
+
     if (previous_capacity)
     {
         size_t mem_size = 0;
@@ -148,6 +151,9 @@ static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 
 void fill_stack (Stack *stk, int start)
 {
+    assert (stk);
+    assert (stk->data);
+
     for (int i = start - 1; i < stk->capacity; i++)
     {
         (stk->data)[i] = POISON;
@@ -156,6 +162,10 @@ void fill_stack (Stack *stk, int start)
 
 int stack_push (Stack *stk, elem_t value, int *err)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (err);
+
     if (err == nullptr)
     {
         err = &ERRNO;
@@ -193,6 +203,10 @@ int __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err)
 
 elem_t stack_pop (Stack *stk, int *err)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (err);
+
     if (err == nullptr)
     {
         err = &ERRNO;
@@ -233,7 +247,8 @@ elem_t __debug_stack_pop (Stack *stk, const int call_line, int *err)
 
 void stack_init (Stack *stk, int capacity, int *err)
 {
-    //stack_error (stk, err);
+    assert (stk);
+    assert (err);
 
     stk->capacity = capacity;
 
@@ -246,11 +261,11 @@ void stack_init (Stack *stk, int capacity, int *err)
         stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
 
         #endif
-
-        stack_error (stk, err);
     }
     else
         ;
+
+    stack_error (stk, err);
 }
 
 void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const char *call_func,
@@ -271,6 +286,9 @@ void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const c
 
 static void stack_resize (Stack *stk)
 {
+    assert (stk);
+    assert (stk->data);
+
     int current_size = stk->size;
     int previous_capacity = stk->capacity;
 
@@ -294,6 +312,8 @@ static void stack_resize (Stack *stk)
 
 static hash_t m_gnu_hash (void *ptr, int size)
 {
+    assert (ptr);
+
     hash_t sum = 5381;
 
     for (hash_t index = 0; index < size; index++)
@@ -306,6 +326,10 @@ static hash_t m_gnu_hash (void *ptr, int size)
 
 static void stack_error (Stack *stk, int *err)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (err);
+
     if (!log_file)
     {
         *err |= STACK_FOPEN_FAILED;
@@ -358,6 +382,11 @@ static void stack_error (Stack *stk, int *err)
 
 static void stack_dump (Stack *stk, int *err, FILE *file)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (err);
+    assert (file);
+
     log_info (stk, err, file);
     log_data (stk, file);
 
@@ -366,6 +395,9 @@ static void stack_dump (Stack *stk, int *err, FILE *file)
 
 void stack_dtor (Stack *stk)
 {
+    assert (stk);
+    assert (stk->data);
+
     stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
 
     if (stk->data)
@@ -381,10 +413,11 @@ void stack_dtor (Stack *stk)
 ////////////////////////////////////////////////////////////////
 
 static void log_info (Stack *stk, int *err, FILE *file)
-{    /*if (*err & STACK_FOPEN_FAILED)
-    {
-        log_file = stderr;
-    }*/
+{
+    assert (stk);
+    assert (stk->data);
+    assert (err);
+    assert (file);
 
     fprintf (file,
             "%s at %s(%d)\n"
@@ -394,6 +427,11 @@ static void log_info (Stack *stk, int *err, FILE *file)
 }
 static void log_status (Stack *stk, int *err, FILE *file)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (err);
+    assert (file);
+
     const char *status[10] = {};
 
     int i = 0;
@@ -472,6 +510,10 @@ static void log_status (Stack *stk, int *err, FILE *file)
 
 static void log_data (Stack *stk, FILE *file)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (file);
+
     fprintf (file,
             "%s at %s in %s(%d)(called at %d):\n"
             "data [%p]:\n",
@@ -482,6 +524,10 @@ static void log_data (Stack *stk, FILE *file)
 
 void log_data_members (Stack *stk, FILE *file)
 {
+    assert (stk);
+    assert (stk->data);
+    assert (file);
+
     fprintf (file, "\tsize = %ld\n", stk->size);
     fprintf (file, "\tcapacity = %ld\n", stk->capacity);
 
