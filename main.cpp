@@ -1,26 +1,54 @@
 #include <stdio.h>
 
-#include "stack.h"
+#define STACK_DEBUG
+#define PROT_LEVEL 3
 
-#define stack_push(A,B) stack_push (A, B, #A, __PRETTY_FUNCTION__, __FILE__, __LINE__)
-#define stack_pop(A,B)  stack_pop  (A, #A, __PRETTY_FUNCTION__, __FILE__, __LINE__, B);
-#define stack_pop(A)    stack_pop  (A, #A, __PRETTY_FUNCTION__, __FILE__, __LINE__);
+//указатель равный малому значению
+//неопределенное поведению при capacity < 10
+#include "stack.h"
 
 int main ()
 {
     Stack stk1 = {};
+    int errnum = 0;
+    Stack *p = &stk1;
+    stack_init (p, 15, &errnum);
 
-    stack_init (&stk1, 5);
-    stack_push (&stk1, 1);
-    stack_push (&stk1, 2);
-    stack_push (&stk1, 3);
-    stack_pop (&stk1);
-    stack_pop (&stk1);
-    stack_push (&stk1, 2);
-    stack_push (&stk1, 3);
+    stack_push (p, 2, &errnum);
+    //stk1.info.call_line = 0;
+    stack_push (&stk1, -34, &errnum);
+    //stk1.info = {};
+    //stk1.left_canary = 1;
+
+
+    double a = stack_pop (&stk1, &errnum);
+    //stk1.info = {};
+    printf ("a");
+    if (errnum)
+    {
+        printf ("error: %d\n", errnum);
+
+        stack_dtor (p);
+
+        return 1;
+    }
+    //printf ("[%lf]\t", a);
+    //stk1.data[0] = 155;
+
+    //printf ("[%lf]\t", stack_pop (&stk1));
+    //printf ("[%d]\t", stack_pop (&stk1));
+    //printf ("[%d]\t", stack_pop (&stk1));
+    //printf ("[%lf]\t", stack_pop (&stk1));
+    //printf ("[%d]\t", stack_pop (&stk1));
+    //printf ("[%d]\t", stack_pop (&stk1));
+    //printf ("[%d]\t", stack_pop (&stk1));
+    //stack_pop (&stk1);
+    //stack_push (&stk1, 3);
+    //stack_push (&stk1, -1);
+    //stack_push (&stk1, 3);
 
     stack_dtor (&stk1);
+    printf ("5");
 
     return 0;
-
 }
