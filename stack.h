@@ -151,8 +151,7 @@ static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 
 void fill_stack (Stack *stk, int start)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
 
     for (int i = start - 1; i < stk->capacity; i++)
     {
@@ -162,8 +161,7 @@ void fill_stack (Stack *stk, int start)
 
 int stack_push (Stack *stk, elem_t value, int *err)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (err);
 
     if (err == nullptr)
@@ -203,8 +201,7 @@ int __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err)
 
 elem_t stack_pop (Stack *stk, int *err)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (err);
 
     if (err == nullptr)
@@ -286,8 +283,7 @@ void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const c
 
 static void stack_resize (Stack *stk)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
 
     int current_size = stk->size;
     int previous_capacity = stk->capacity;
@@ -326,8 +322,7 @@ static hash_t m_gnu_hash (void *ptr, int size)
 
 static void stack_error (Stack *stk, int *err)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (err);
 
     if (!log_file)
@@ -382,8 +377,7 @@ static void stack_error (Stack *stk, int *err)
 
 static void stack_dump (Stack *stk, int *err, FILE *file)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (err);
     assert (file);
 
@@ -395,8 +389,7 @@ static void stack_dump (Stack *stk, int *err, FILE *file)
 
 void stack_dtor (Stack *stk)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
 
     stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
 
@@ -414,8 +407,7 @@ void stack_dtor (Stack *stk)
 
 static void log_info (Stack *stk, int *err, FILE *file)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (err);
     assert (file);
 
@@ -427,8 +419,7 @@ static void log_info (Stack *stk, int *err, FILE *file)
 }
 static void log_status (Stack *stk, int *err, FILE *file)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (err);
     assert (file);
 
@@ -510,8 +501,7 @@ static void log_status (Stack *stk, int *err, FILE *file)
 
 static void log_data (Stack *stk, FILE *file)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (file);
 
     fprintf (file,
@@ -524,8 +514,7 @@ static void log_data (Stack *stk, FILE *file)
 
 void log_data_members (Stack *stk, FILE *file)
 {
-    assert (stk);
-    assert (stk->data);
+    assert (stk && stk->data);
     assert (file);
 
     fprintf (file, "\tsize = %ld\n", stk->size);
