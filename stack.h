@@ -8,20 +8,6 @@
 #define PROT_LEVEL CANARY_PROT
 #endif
 
-#if (PROT_LEVEL & CANARY_PROT)
-
-#define mem_size            stk->capacity * sizeof (elem_t) + CANARIES_NUMBER * sizeof (canary_t)
-#define p_data_start        ((char *)stk->data - sizeof (canary_t))
-#define p_real_data_start   ((char *)stk->data + sizeof (canary_t))
-
-#else
-
-#define mem_size         stk->capacity * sizeof (elem_t)
-#define p_data_start     stk->data
-#define p_ral_data_start stk->data
-
-#endif
-
 
 typedef unsigned long long canary_t;
 typedef unsigned long long hash_t;
@@ -110,15 +96,23 @@ static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 {
     if (previous_capacity)
     {
-        stk->data = (elem_t *)p_data_start;
-        stk->data = (elem_t *)realloc (stk->data, mem_size);
-        stk->data = (elem_t *)p_real_data_start;
+        size_t mem_size = 0;
 
         #if (PROT_LEVEL & CANARY_PROT)
+        stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
+
+        mem_size = stk->capacity * sizeof (elem_t) + CANARIES_NUMBER * sizeof (canary_t);
+        #else
+        mem_size = stk->capacity * sizeof (elem_t);
+        #endif
+
+        stk->data = (elem_t *)realloc (stk->data, mem_size);
+
+        #if (PROT_LEVEL & CANARY_PROT)
+        stk->data = (elem_t *)((char *)stk->data + sizeof (canary_t));
 
         *((canary_t *)(stk->data + previous_capacity)) = POISON;
         *((canary_t *)(stk->data + stk->capacity)) = CANARY;
-
         #endif
     }
     else
