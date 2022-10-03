@@ -1,5 +1,10 @@
+#ifndef STACK_H
+#define STACK_H
+
 #include <stdlib.h>
 #include <assert.h>
+
+#include "hash.h"
 
 #define CANARY_PROT 1
 #define HASH_PROT 2
@@ -10,7 +15,6 @@
 
 
 typedef unsigned long long canary_t;
-typedef unsigned long long hash_t;
 typedef double elem_t;
 
 
@@ -78,10 +82,10 @@ int    __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *e
 elem_t __debug_stack_pop  (Stack *stk,               const int call_line, int *err);
 
 static int   stack_realloc (Stack *stk, int previous_capacity, int *err = &ERRNO);
-void         fill_stack    (Stack *stk, int start);
-static void  stack_error   (Stack *stk, int *err);
+static void  fill_stack    (Stack *stk, int start, int *err);
+static int   stack_error   (Stack *stk, int *err, int need_in_dump = 1);
 static void  stack_dump    (Stack *stk, int *err, FILE *file = log_file);
-static void  stack_resize  (Stack *stk);
+static void  stack_resize  (Stack *stk, int *err);
 void         stack_dtor    (Stack *stk);
 
 static void   log_status       (Stack *stk, int *err, FILE *file = log_file);
@@ -89,13 +93,15 @@ static void   log_info         (Stack *stk, int *err, FILE *file = log_file);
 static void   log_data         (Stack *stk, FILE *file = log_file);
 static void   log_data_members (Stack *stk, FILE *file = log_file);
 
-static hash_t m_gnu_hash (void *ptr, int size);
-
-
 static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 {
     assert (stk);
     assert (err);
+
+    if (!(stk && err) || previous_capacity < 0)
+    {
+        printf ("You couldn't use this function");
+    }
 
     if (previous_capacity)
     {
@@ -149,9 +155,14 @@ static int stack_realloc (Stack *stk, int previous_capacity, int *err)
     return 0;
 }
 
-void fill_stack (Stack *stk, int start)
+void fill_stack (Stack *stk, int start, int *err)
 {
     assert (stk && stk->data);
+
+    if (!(stk && stk->data && err))
+    {
+        printf ("You couldn't use this function");
+    }
 
     for (int i = start - 1; i < stk->capacity; i++)
     {
@@ -176,7 +187,7 @@ int stack_push (Stack *stk, elem_t value, int *err)
         return *err;
     }
 
-    stack_resize (stk);
+    stack_resize (stk, err);
 
     (stk->data)[stk->size++] = value;
 
@@ -216,7 +227,7 @@ elem_t stack_pop (Stack *stk, int *err)
         return (elem_t)*err;
     }
 
-    stack_resize (stk);
+    stack_resize (stk, err);
 
     (stk->size)--;
     elem_t latest_value = (stk->data)[stk->size];
@@ -247,11 +258,16 @@ void stack_init (Stack *stk, int capacity, int *err)
     assert (stk);
     assert (err);
 
+    if (err == nullptr)
+    {
+        err = &ERRNO;
+    }
+
     stk->capacity = capacity;
 
     if (!(stack_realloc (stk, 0, err)))
     {
-        fill_stack (stk, 1);
+        fill_stack (stk, 1, err);
 
         #if (PROT_LEVEL & HASH_PROT)
 
@@ -281,9 +297,14 @@ void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const c
     stack_init (stk, capacity, err);
 }
 
-static void stack_resize (Stack *stk)
+static void stack_resize (Stack *stk, int *err)
 {
     assert (stk && stk->data);
+
+    if (stack_error (stk, err, 0))
+    {
+        stack_dump (stk, err);
+    }
 
     int current_size = stk->size;
     int previous_capacity = stk->capacity;
@@ -294,33 +315,19 @@ static void stack_resize (Stack *stk)
         {
             stk->capacity *= 2;
 
-            stack_realloc (stk, previous_capacity);
-            fill_stack    (stk, previous_capacity + 1);
+            stack_realloc (stk, previous_capacity, err);
+            fill_stack    (stk, previous_capacity + 1, err);
         }
         if (stk->capacity > current_size * 4)
         {
             stk->capacity /= 2;
 
-            stack_realloc (stk, previous_capacity);
+            stack_realloc (stk, previous_capacity, err);
         }
     }
 }
 
-static hash_t m_gnu_hash (void *ptr, int size)
-{
-    assert (ptr);
-
-    hash_t sum = 5381;
-
-    for (hash_t index = 0; index < size; index++)
-    {
-        sum = 33 * sum + ((char *)ptr)[index];
-    }
-
-    return sum;
-}
-
-static void stack_error (Stack *stk, int *err)
+static int stack_error (Stack *stk, int *err, int need_in_dump)
 {
     assert (stk && stk->data);
     assert (err);
@@ -371,8 +378,13 @@ static void stack_error (Stack *stk, int *err)
     #endif
 
     #ifdef STACK_DEBUG
-    stack_dump (stk, err);
+    if (need_in_dump)
+    {
+        stack_dump (stk, err);
+    }
     #endif
+
+    return *err;
 }
 
 static void stack_dump (Stack *stk, int *err, FILE *file)
@@ -381,20 +393,25 @@ static void stack_dump (Stack *stk, int *err, FILE *file)
     assert (err);
     assert (file);
 
-    log_info (stk, err, file);
-    log_data (stk, file);
+    if (stk && stk->data && err && file)
+    {
+        log_info (stk, err, file);
+        log_data (stk, file);
 
-    fprintf (file, "\n\n");
+        fprintf (file, "\n\n");
+    }
+    else
+        ;
 }
 
 void stack_dtor (Stack *stk)
 {
     assert (stk && stk->data);
 
-    stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
-
-    if (stk->data)
+    if (stk && stk->data)
     {
+        stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
+
         free (stk->data);
     }
     else
@@ -537,3 +554,5 @@ void log_data_members (Stack *stk, FILE *file)
 #define stack_pop(stk,err)               __debug_stack_pop  (stk, __LINE__, err)
 
 #endif
+
+#endif /* STACK_H */
