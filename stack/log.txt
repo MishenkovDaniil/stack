@@ -1,27 +1,33 @@
+/**
+ *\file
+ */
+
 #ifndef STACK_H
 #define STACK_H
 
 #include <stdlib.h>
 #include <assert.h>
 
-#include "hash.h"
 
-#define CANARY_PROT 1
-#define HASH_PROT 2
+#define CANARY_PROT 1 // state value for turning on canary protection of stack and stack data
+#define HASH_PROT 2   // state value for turning on hash protection of stack and stack data
 
 #ifndef PROT_LEVEL
 #define PROT_LEVEL CANARY_PROT
 #endif
 
+#if (PROT_LEVEL & HASH_PROT)
+#include "..\hash\hash.h"
+#endif
 
-typedef unsigned long long canary_t;
-typedef double elem_t;
+typedef unsigned long long canary_t; // sets canary type
+typedef double elem_t;               // sets type of data elements
 
 
-static int ERRNO = 0;
-static const int CANARIES_NUMBER = 2;
-static const size_t POISON = 0xDEADBEEF;
-static const canary_t CANARY = 0xAB8EACAAAB8EACAA;
+static int ERRNO = 0;                              // sets a "non-error" value
+static const int CANARIES_NUMBER = 2;              // sets a number of "canaries"
+static const size_t POISON = 0xDEADBEEF;           // sets "poison" value (a value to indicate errors in stack data values)
+static const canary_t CANARY = 0xAB8EACAAAB8EACAA; // sets value of "canary" (a value to indicate safety of stack and stack data)
 
 enum errors
 {
@@ -38,27 +44,28 @@ enum errors
 
 struct Debug_info
 {
-    const char *func      = nullptr;
-    const char *file      = nullptr;
-    const char *stk_name  = nullptr;
-    const char *call_func = nullptr;
-    const char *call_file = nullptr;
-    int creat_line = 0;
-    int call_line = 0;
-    int line = 0;
+    const char *func      = nullptr; // name of called function
+    const char *file      = nullptr; // name of file where the called function is
+    const char *stk_name  = nullptr; // name of stack
+    const char *call_func = nullptr; // name of calling function
+    const char *call_file = nullptr; // name of file where the calling function is
+    int creat_line = 0;              // line where stack is created (initialised)
+    int call_line = 0;               // line where calling function is situated
+    int line = 0;                    // line where called function starts
 };
 
+/// struct with info about stack
 struct Stack
 {
     #if (PROT_LEVEL & CANARY_PROT)
-    canary_t left_canary = CANARY;
+    canary_t left_canary = CANARY; // "canary" to avoid foreign data contamination of stack
     #endif
 
     struct Debug_info info = {};
 
     elem_t *data = nullptr;
 
-    int size = 0;
+    int size = 0;                  // number of initialised elements in data
     int capacity = 0;
 
     #if (PROT_LEVEL & HASH_PROT)
@@ -66,11 +73,11 @@ struct Stack
     #endif
 
     #if (PROT_LEVEL & CANARY_PROT)
-    canary_t right_canary = CANARY;
+    canary_t right_canary = CANARY; // "canary" to avoid foreign data contamination of stack
     #endif
 };
 
-static FILE *log_file = fopen ("log.txt", "w");
+static FILE *log_file = fopen ("log.txt", "w"); // output file
 
 void   stack_init (Stack *stk, int capacity, int *err = &ERRNO);
 int    stack_push (Stack *stk, elem_t value, int *err = &ERRNO);
@@ -100,7 +107,7 @@ static int stack_realloc (Stack *stk, int previous_capacity, int *err)
 
     if (!(stk && err) || previous_capacity < 0)
     {
-        printf ("You couldn't use this function");
+        printf ("ERROR: stack pointer or error pointer is a nullptr or previous capacity at func stack_realloc is under zero\n");
     }
 
     if (previous_capacity)
@@ -161,7 +168,7 @@ void fill_stack (Stack *stk, int start, int *err)
 
     if (!(stk && stk->data && err))
     {
-        printf ("You couldn't use this function");
+        printf ("ERROR: stack, stack data or error pointer is a null pointer\n");
     }
 
     for (int i = start - 1; i < stk->capacity; i++)
@@ -440,9 +447,11 @@ static void log_status (Stack *stk, int *err, FILE *file)
     assert (err);
     assert (file);
 
-    const char *status[10] = {};
+    int err_number = 10;
 
-    int i = 0;
+    const char **status = (const char **)calloc (err_number, sizeof (const char *));
+
+    int index = 0;
 
     if (*err)
     {
@@ -450,67 +459,57 @@ static void log_status (Stack *stk, int *err, FILE *file)
 
         if (*err & STACK_FOPEN_FAILED)
         {
-            status[i] = "opening log file failed";
-            i++;
+            status[index++] = "opening log file failed";
         }
         if (*err & STACK_ALLOC_FAIL)
         {
-            status[i] = "memory allocation failed";
-            i++;
+            status[index++] = "memory allocation failed";
         }
         if (*err & STACK_NULL_STK)
         {
-            status[i] = "stk is a null pointer";
-            i++;
+            status[index++] = "stk is a null pointer";
         }
         if (*err & STACK_NULL_DATA)
         {
-            status[i] = "data is a null pointer";
-            i++;
+            status[index++] = "data is a null pointer";
         }
         if ((*err) & STACK_STACK_OVERFLOW)
         {
-            status[i] = "stack overflow";
-            i++;
+            status[index++] = "stack overflow";
         }
         if ((*err) & STACK_INCORRECT_SIZE)
         {
-            status[i] = "capacity or size of stack is under zero";
-            i++;
+            status[index++] = "capacity or size of stack is under zero";
         }
         if ((*err) & STACK_VIOLATED_DATA)
         {
-            status[i] = "access rights of stack data are invaded";
-            i++;
+            status[index++] = "access rights of stack data are invaded";
         }
         if ((*err) & STACK_VIOLATED_STACK)
         {
-            status[i] = "access rights of stack are invaded";
-            i++;
+            status[index++] = "access rights of stack are invaded";
         }
         if ((*err) & STACK_DATA_MESSED_UP)
         {
-            status[i] = "one or more values in stack data are unexpectidly changed";
-            i++;
+            status[index++] = "one or more values in stack data are unexpectidly changed";
         }
     }
     else
     {
-        status[i] = "(ok";
-        i++;
+        status[index++] = "(ok";
     }
 
-    status[i] = nullptr;
+    status[index] = nullptr;
 
-    for (int index = 0; index < i; index++)
+    for (int i = 0; i < index; i++)
     {
-        if (index < i - 1)
+        if (i < index - 1)
         {
-            fprintf (file, "%s, ", status[index]);
+            fprintf (file, "%s, ", status[i]);
         }
         else
         {
-            fprintf (file, "%s", status[index]);
+            fprintf (file, "%s", status[i]);
         }
     }
     fprintf (file, ")\n");

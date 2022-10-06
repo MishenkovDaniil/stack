@@ -7,16 +7,26 @@
 //неопределенное поведению при capacity < 10
 #include "stack.h"
 
+
 int main ()
 {
     Stack stk1 = {};
+
     int errnum = 0;
+
     Stack *p = &stk1;
-    stack_init (p, 15, &errnum);
+
+    stack_init (p, 1, &errnum);
+    //stack_resize (p);
+    printf ("a");
 
     stack_push (p, 2, &errnum);
+
+    printf ("a");
+
     //stk1.info.call_line = 0;
     stack_push (&stk1, -34, &errnum);
+    printf ("a");
     //stk1.info = {};
     //stk1.left_canary = 1;
 
