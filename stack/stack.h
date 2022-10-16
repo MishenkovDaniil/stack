@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
+//double check!!!
 
 #define CANARY_PROT 1 // state value for turning on canary protection of stack and stack data
 #define HASH_PROT 2   // state value for turning on hash protection of stack and stack data
@@ -79,14 +80,37 @@ struct Stack
 
 static FILE *log_file = fopen ("log.txt", "w"); // output file
 
-void   stack_init (Stack *stk, int capacity, int *err = &ERRNO);
+/**
+ *creates stack data
+ * \param [out
+ ] stk      pointer to struct Stack
+ * \param [in] capacity start capacity for data
+ * \param [in] err      show if situation error or not error
+ * \return              null if success, else error code
+ */
+int   stack_init (Stack *stk, int capacity, int *err = &ERRNO);
+
+/**
+ *push value in stack data
+ * \param [out] stk      pointer to struct Stack
+ * \param [in] value    value to push
+ * \param [in] err      show if situation error or not error
+ * \return              null if success, else error code
+ */
 int    stack_push (Stack *stk, elem_t value, int *err = &ERRNO);
+
+/**
+ *pop latest element of data
+ * \param [out] stk      pointer to struct Stack
+ * \param [in] err      show if situation error or not error
+ * \return              latest element of data
+ */
 elem_t stack_pop  (Stack *stk,               int *err = &ERRNO);
 
-void   __debug_stack_init (Stack *stk, int capacity, const char *stk_name,   const char *call_func,
-                                                     const char *call_file, const int creat_line, int *err);
-int    __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err);
-elem_t __debug_stack_pop  (Stack *stk,               const int call_line, int *err);
+void   __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const char *call_func, const int call_line,
+                                                     const char *call_file, const int creat_line, int *err = &ERRNO);
+int    __debug_stack_push (Stack *stk, elem_t value, const int call_line, int *err = &ERRNO);
+elem_t __debug_stack_pop  (Stack *stk,               const int call_line, int *err = &ERRNO);
 
 static int   stack_realloc (Stack *stk, int previous_capacity, int *err = &ERRNO);
 static void  fill_stack    (Stack *stk, int start, int *err);
@@ -150,11 +174,17 @@ static int stack_realloc (Stack *stk, int previous_capacity, int *err)
         #endif
     }
 
+    #ifdef HASH_PROT
+    stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
+    #endif
+
     if (stk->data == nullptr)
     {
         *err |= STACK_ALLOC_FAIL;
 
+        #ifdef STACK_DEBUG
         stack_dump(stk, err, stderr);
+        #endif
 
         return *err;
     }
@@ -171,10 +201,14 @@ void fill_stack (Stack *stk, int start, int *err)
         printf ("ERROR: stack, stack data or error pointer is a null pointer\n");
     }
 
-    for (int i = start - 1; i < stk->capacity; i++)
+    for (int i = start; i < stk->capacity; i++)
     {
         (stk->data)[i] = POISON;
     }
+
+    #ifdef HASH_PROT
+    stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
+    #endif
 }
 
 int stack_push (Stack *stk, elem_t value, int *err)
@@ -187,7 +221,12 @@ int stack_push (Stack *stk, elem_t value, int *err)
         err = &ERRNO;
     }
 
-    stack_error(stk, err);
+    if (stack_error (stk, err, 0))
+    {
+        #ifdef STACK_DEBUG
+        stack_dump (stk, err);
+        #endif
+    }
 
     if (*err)
     {
@@ -203,6 +242,8 @@ int stack_push (Stack *stk, elem_t value, int *err)
     stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof(elem_t));
 
     #endif
+
+    stack_error (stk, err);
 
     return 0;
 }
@@ -227,7 +268,12 @@ elem_t stack_pop (Stack *stk, int *err)
         err = &ERRNO;
     }
 
-    stack_error(stk, err);
+    if (stack_error (stk, err, 0))
+    {
+        #ifdef STACK_DEBUG
+        stack_dump (stk, err);
+        #endif
+    }
 
     if (*err)
     {
@@ -237,6 +283,14 @@ elem_t stack_pop (Stack *stk, int *err)
     stack_resize (stk, err);
 
     (stk->size)--;
+
+    if (stk->size < 0)
+    {
+        stack_error (stk, err);
+
+        return POISON;
+    }
+
     elem_t latest_value = (stk->data)[stk->size];
 
     (stk->data)[stk->size] = POISON;
@@ -246,6 +300,8 @@ elem_t stack_pop (Stack *stk, int *err)
     stk->hash_sum = m_gnu_hash (stk->data, stk->capacity * sizeof (elem_t));
 
     #endif
+
+    stack_error(stk, err);
 
     return latest_value;
 }
@@ -260,7 +316,7 @@ elem_t __debug_stack_pop (Stack *stk, const int call_line, int *err)
     return stack_pop (stk, err);
 }
 
-void stack_init (Stack *stk, int capacity, int *err)
+int stack_init (Stack *stk, int capacity, int *err)
 {
     assert (stk);
     assert (err);
@@ -274,7 +330,7 @@ void stack_init (Stack *stk, int capacity, int *err)
 
     if (!(stack_realloc (stk, 0, err)))
     {
-        fill_stack (stk, 1, err);
+        fill_stack (stk, 0, err);
 
         #if (PROT_LEVEL & HASH_PROT)
 
@@ -282,18 +338,19 @@ void stack_init (Stack *stk, int capacity, int *err)
 
         #endif
     }
-    else
-        ;
 
     stack_error (stk, err);
+
+    return 0;
 }
 
-void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const char *call_func,
+void __debug_stack_init (Stack *stk, int capacity, const char *stk_name, const char *call_func, const int call_line,
                          const char *call_file, const int creat_line, int *err)
 {
     (stk->info).call_func = call_func;
     (stk->info).call_file = call_file;
     (stk->info).creat_line = creat_line;
+    stk->info.call_line = call_line;
 
     (stk->info).file = __FILE__;
     (stk->info).func = __PRETTY_FUNCTION__;
@@ -310,7 +367,9 @@ static void stack_resize (Stack *stk, int *err)
 
     if (stack_error (stk, err, 0))
     {
+        #ifdef STACK_DEBUG
         stack_dump (stk, err);
+        #endif
     }
 
     int current_size = stk->size;
@@ -323,7 +382,7 @@ static void stack_resize (Stack *stk, int *err)
             stk->capacity *= 2;
 
             stack_realloc (stk, previous_capacity, err);
-            fill_stack    (stk, previous_capacity + 1, err);
+            fill_stack    (stk, previous_capacity, err);
         }
         if (stk->capacity > current_size * 4)
         {
@@ -332,17 +391,26 @@ static void stack_resize (Stack *stk, int *err)
             stack_realloc (stk, previous_capacity, err);
         }
     }
+
+    if (stack_error (stk, err, 0))
+    {
+        #ifdef STACK_DEBUG
+        stack_dump (stk, err);
+        #endif
+    }
 }
 
 static int stack_error (Stack *stk, int *err, int need_in_dump)
 {
-    assert (stk && stk->data);
+    assert (stk);
     assert (err);
 
     if (!log_file)
     {
         *err |= STACK_FOPEN_FAILED;
+        #ifdef STACK_DEBUG
         stack_dump (stk, err, stderr);
+        #endif
     }
     if (!stk)
     {
@@ -420,9 +488,10 @@ void stack_dtor (Stack *stk)
         stk->data = (elem_t *)((char *)stk->data - sizeof (canary_t));
 
         free (stk->data);
+
+        stk->data = nullptr;
+        stk = nullptr;
     }
-    else
-        ;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -548,9 +617,9 @@ void log_data_members (Stack *stk, FILE *file)
 
 #ifdef STACK_DEBUG
 
-#define stack_init(stk,capacity,err)     __debug_stack_init (stk, capacity, #stk, __PRETTY_FUNCTION__, __FILE__, __LINE__, err)
-#define stack_push(stk,value,err)        __debug_stack_push (stk, value, __LINE__, err)
-#define stack_pop(stk,err)               __debug_stack_pop  (stk, __LINE__, err)
+#define stack_init(stk, capacity, err)     __debug_stack_init (stk, capacity, #stk, __PRETTY_FUNCTION__, __LINE__, __FILE__, __LINE__, err)
+#define stack_push(stk, value, err)        __debug_stack_push (stk, value, __LINE__, err)
+#define stack_pop(stk, err)               __debug_stack_pop  (stk, __LINE__, err)
 
 #endif
 
